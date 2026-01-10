@@ -1,0 +1,17 @@
+{
+  "analysis_id": "test-001",
+  "timestamp": "2025-12-31T10:00:00Z",
+  "total_files": 5,
+  "clusters": [
+    {
+      "files": ["src/__tests__/fixtures/documents/doc-a.md", "src/__tests__/fixtures/documents/doc-b.md"],
+      "similarity": 0.85
+    },
+    {
+      "files": ["src/__tests__/fixtures/documents/doc-a.md", "src/__tests__/fixtures/documents/doc-b.md", "src/__tests__/fixtures/documents/doc-c.md"],
+      "similarity": 0.72
+    }
+  ],
+  "total_redundancy_bytes": 15000,
+  "estimated_savings": "15.0 KB"
+}

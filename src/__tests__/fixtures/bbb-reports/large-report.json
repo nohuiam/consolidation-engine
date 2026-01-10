@@ -1,0 +1,17 @@
+{
+  "clusters": [
+    {"files": ["/test/large/doc001.md", "/test/large/doc002.md"], "similarity": 0.75},
+    {"files": ["/test/large/doc003.md", "/test/large/doc004.md"], "similarity": 0.80},
+    {"files": ["/test/large/doc005.md", "/test/large/doc006.md"], "similarity": 0.85},
+    {"files": ["/test/large/doc007.md", "/test/large/doc008.md"], "similarity": 0.90},
+    {"files": ["/test/large/doc009.md", "/test/large/doc010.md"], "similarity": 0.95},
+    {"files": ["/test/large/doc011.md", "/test/large/doc012.md"], "similarity": 0.78},
+    {"files": ["/test/large/doc013.md", "/test/large/doc014.md"], "similarity": 0.82},
+    {"files": ["/test/large/doc015.md", "/test/large/doc016.md"], "similarity": 0.88},
+    {"files": ["/test/large/doc017.md", "/test/large/doc018.md"], "similarity": 0.92},
+    {"files": ["/test/large/doc019.md", "/test/large/doc020.md"], "similarity": 0.96}
+  ],
+  "total_redundancy_bytes": 500000,
+  "scan_date": "2025-12-31T00:00:00Z",
+  "files_analyzed": 100
+}

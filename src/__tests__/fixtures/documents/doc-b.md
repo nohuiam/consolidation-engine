@@ -1,0 +1,18 @@
+# Introduction
+
+This is the introduction from document B - different content.
+
+# Setup
+
+Install using yarn:
+
+```bash
+yarn add package-b
+```
+
+# API Reference
+
+This section only exists in doc B.
+
+- GET /api/users
+- POST /api/users

@@ -1,11 +1,16 @@
 /**
  * InterLock UDP Socket
  *
- * Main UDP socket for InterLock mesh communication.
+ * Main UDP socket for InterLock mesh communication using shared @bop/interlock package.
  */
 
-import dgram from 'dgram';
-import { encode, decode, SIGNAL_TYPES, getSignalName } from './protocol.js';
+import {
+  InterlockSocket as SharedInterlockSocket,
+  type Signal as SharedSignal,
+  type SignalInput,
+  type RemoteInfo,
+} from '@bop/interlock';
+import { SIGNAL_TYPES, getSignalName } from './protocol.js';
 import { Tumbler } from './tumbler.js';
 import { SignalHandlers } from './handlers.js';
 
@@ -28,12 +33,11 @@ export interface PeerInfo {
 }
 
 export class InterlockSocket {
-  private socket: dgram.Socket | null = null;
+  private socket: SharedInterlockSocket | null = null;
   private config: InterlockConfig;
   private tumbler: Tumbler;
   private handlers: SignalHandlers;
   private peers: Map<string, PeerInfo> = new Map();
-  private heartbeatInterval: NodeJS.Timeout | null = null;
   private running: boolean = false;
 
   constructor(config: InterlockConfig) {
@@ -65,47 +69,49 @@ export class InterlockSocket {
    * Start the UDP socket
    */
   async start(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.socket = dgram.createSocket('udp4');
+    // Convert peers to shared package format
+    const peerConfig: Record<string, { host: string; port: number }> = {};
+    for (const [name, info] of this.peers) {
+      peerConfig[name] = { host: info.host, port: info.port };
+    }
 
-        this.socket.on('error', (err) => {
-          console.error('[InterLock] Socket error:', err.message);
-          if (!this.running) {
-            reject(err);
-          }
-        });
-
-        this.socket.on('message', (msg, rinfo) => {
-          this.handleMessage(msg, rinfo);
-        });
-
-        this.socket.bind(this.config.port, () => {
-          this.running = true;
-          console.error(`[InterLock] Listening on UDP port ${this.config.port}`);
-
-          // Start heartbeat
-          this.startHeartbeat();
-
-          // Send discovery to known peers
-          this.discover();
-
-          resolve();
-        });
-      } catch (error) {
-        reject(error);
-      }
+    this.socket = new SharedInterlockSocket({
+      port: this.config.port,
+      serverId: this.config.serverId || 'consolidation-engine',
+      heartbeat: {
+        interval: this.config.heartbeat?.interval || 30000,
+        timeout: this.config.heartbeat?.timeout || 90000,
+      },
+      peers: peerConfig,
     });
+
+    this.socket.on('signal', (sharedSignal: SharedSignal, rinfo: RemoteInfo) => {
+      this.handleMessage(sharedSignal, rinfo);
+    });
+
+    this.socket.on('error', (err: Error) => {
+      console.error('[InterLock] Socket error:', err.message);
+    });
+
+    await this.socket.start();
+    this.running = true;
+    console.error(`[InterLock] Listening on UDP port ${this.config.port}`);
+
+    // Send discovery to known peers
+    this.discover();
   }
 
   /**
    * Handle incoming message
    */
-  private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo): void {
-    const message = decode(msg);
-    if (!message) {
-      return;
-    }
+  private handleMessage(sharedSignal: SharedSignal, rinfo: RemoteInfo): void {
+    // Convert to local message format
+    const message = {
+      type: sharedSignal.type,
+      serverId: sharedSignal.data.serverId as string || 'unknown',
+      data: sharedSignal.data,
+      timestamp: sharedSignal.timestamp,
+    };
 
     // Check tumbler whitelist
     if (!this.tumbler.isAllowed(message.type)) {
@@ -121,23 +127,6 @@ export class InterlockSocket {
 
     // Route to handlers
     this.handlers.route(message, rinfo);
-  }
-
-  /**
-   * Start heartbeat interval
-   */
-  private startHeartbeat(): void {
-    const interval = this.config.heartbeat?.interval || 30000;
-
-    this.heartbeatInterval = setInterval(() => {
-      this.broadcast({
-        type: SIGNAL_TYPES.HEARTBEAT,
-        data: {
-          uptime: process.uptime(),
-          peers: this.peers.size
-        }
-      });
-    }, interval);
   }
 
   /**
@@ -177,27 +166,19 @@ export class InterlockSocket {
    * Send message to specific address
    */
   async sendTo(host: string, port: number, message: { type: number; data?: unknown }): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket) {
-        reject(new Error('Socket not initialized'));
-        return;
-      }
+    if (!this.socket) {
+      throw new Error('Socket not initialized');
+    }
 
-      const buffer = encode({
-        type: message.type,
+    const signalInput: SignalInput = {
+      type: message.type,
+      data: {
         serverId: this.config.serverId || 'consolidation-engine',
-        data: message.data
-      });
+        ...(message.data as Record<string, unknown> || {}),
+      },
+    };
 
-      this.socket.send(buffer, port, host, (err) => {
-        if (err) {
-          console.error(`[InterLock] Send error to ${host}:${port}:`, err.message);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    await this.socket.send(host, port, signalInput);
   }
 
   /**
@@ -270,27 +251,16 @@ export class InterlockSocket {
   async stop(): Promise<void> {
     this.running = false;
 
-    // Clear heartbeat
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-
     // Send shutdown signal
     await this.broadcast({
       type: SIGNAL_TYPES.SHUTDOWN,
       data: { reason: 'Server stopping' }
     }).catch(() => {});
 
-    return new Promise((resolve) => {
-      if (this.socket) {
-        this.socket.close(() => {
-          console.error('[InterLock] Socket closed');
-          resolve();
-        });
-      } else {
-        resolve();
-      }
-    });
+    if (this.socket) {
+      await this.socket.stop();
+      this.socket = null;
+    }
+    console.error('[InterLock] Socket closed');
   }
 }

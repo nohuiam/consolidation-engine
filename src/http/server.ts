@@ -14,6 +14,24 @@ import { getMergeEngine } from '../core/merge-engine.js';
 import { getConflictResolver } from '../core/conflict-resolver.js';
 import { getDatabase } from '../database/schema.js';
 
+// Import tool definitions for /api/tools endpoint
+import { CREATE_MERGE_PLAN_TOOL } from '../tools/create-merge-plan.js';
+import { VALIDATE_PLAN_TOOL } from '../tools/validate-plan.js';
+import { MERGE_DOCUMENTS_TOOL } from '../tools/merge-documents.js';
+import { DETECT_CONFLICTS_TOOL } from '../tools/detect-conflicts.js';
+import { RESOLVE_CONFLICTS_TOOL } from '../tools/resolve-conflicts.js';
+import { GET_MERGE_HISTORY_TOOL } from '../tools/get-merge-history.js';
+
+// Tool list for gateway discovery
+const TOOLS = [
+  CREATE_MERGE_PLAN_TOOL,
+  VALIDATE_PLAN_TOOL,
+  MERGE_DOCUMENTS_TOOL,
+  DETECT_CONFLICTS_TOOL,
+  RESOLVE_CONFLICTS_TOOL,
+  GET_MERGE_HISTORY_TOOL
+];
+
 // CORS whitelist - restrict to known origins for security
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',   // GMI frontend (Vite)
@@ -206,6 +224,14 @@ export class HttpServer {
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
       }
+    });
+
+    // Tools endpoint for gateway discovery
+    this.app.get('/api/tools', (req: Request, res: Response) => {
+      res.json({
+        tools: TOOLS,
+        count: TOOLS.length
+      });
     });
 
     // 404 handler

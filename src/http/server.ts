@@ -9,10 +9,20 @@ import express, { Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { randomUUID } from 'crypto';
 import { getPlanManager } from '../core/plan-manager.js';
 import { getMergeEngine } from '../core/merge-engine.js';
 import { getConflictResolver } from '../core/conflict-resolver.js';
 import { getDatabase } from '../database/schema.js';
+
+// Extend Express Request for request ID tracing
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+    }
+  }
+}
 
 // Import tool definitions for /api/tools endpoint
 import { CREATE_MERGE_PLAN_TOOL } from '../tools/create-merge-plan.js';
@@ -88,6 +98,14 @@ export class HttpServer {
 
     // Apply general rate limiting
     this.app.use(generalLimiter);
+
+    // Request ID tracing middleware (Linus audit compliance)
+    this.app.use((req: Request, res: Response, next: NextFunction) => {
+      const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+      req.requestId = requestId;
+      res.setHeader('X-Request-ID', requestId);
+      next();
+    });
   }
 
   private setupRoutes(): void {
@@ -101,6 +119,31 @@ export class HttpServer {
         port: this.port,
         stats
       });
+    });
+
+    // Readiness check (Linus audit compliance - checks DB connectivity)
+    this.app.get('/health/ready', (req: Request, res: Response) => {
+      try {
+        const db = getDatabase();
+        const stats = db.getStats();
+
+        res.json({
+          ready: true,
+          server: 'consolidation-engine',
+          checks: {
+            database: stats !== undefined
+          }
+        });
+      } catch (error) {
+        res.status(503).json({
+          ready: false,
+          server: 'consolidation-engine',
+          checks: {
+            database: false
+          },
+          error: 'Database not ready'
+        });
+      }
     });
 
     // Plan routes
